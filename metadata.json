@@ -1,0 +1,5 @@
+{
+  "name": "Smart Drainage Monitor",
+  "description": "A modern Web Bluetooth dashboard for monitoring water levels and controlling smart drainage systems with an Arduino.",
+  "requestFramePermissions": []
+}
