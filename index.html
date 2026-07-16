@@ -3,14 +3,1810 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="A Web Bluetooth dashboard for monitoring smart drainage water levels and controlling a pump or gate."
-    />
     <title>Smart Drainage Monitor</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+      /* Custom styles to complement Tailwind CSS */
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+      
+      body {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        background-color: #030712; /* deep black-slate */
+      }
+      
+      .font-mono-tech {
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      /* Custom scrollbar for console logs */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.6);
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.3);
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.5);
+      }
+
+      /* Pulse animation for active status */
+      @keyframes active-pulse {
+        0%, 100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+        }
+        50% {
+          transform: scale(1.05);
+          box-shadow: 0 0 15px 4px rgba(16, 185, 129, 0.6);
+        }
+      }
+      
+      .status-pulse-active {
+        animation: active-pulse 2s infinite ease-in-out;
+      }
+
+      /* Animated SVG waves */
+      .wave-path {
+        transition: d 0.5s ease-in-out;
+      }
+    </style>
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body class="text-slate-100 min-h-screen flex flex-col selection:bg-blue-500 selection:text-slate-950">
+    
+    <!-- Header Navigation -->
+    <header id="header" class="h-20 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50 px-6 sm:px-10 flex items-center justify-between">
+      <div class="max-w-7xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-4">
+        <!-- Logo and Title -->
+        <div class="flex items-center gap-4">
+          <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <i data-lucide="droplet" class="text-white w-5 h-5 animate-pulse"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold tracking-tight text-white">Smart Drainage Monitor</h1>
+            <p class="text-xs text-slate-400 uppercase tracking-widest">Industrial IoT Interface</p>
+          </div>
+        </div>
+
+        <!-- Connection Badges & Quick Controls -->
+        <div class="flex flex-wrap items-center gap-4">
+          <!-- Hidden simulation element for JS compatibility -->
+          <div id="simBadge" class="hidden"></div>
+
+          <!-- Bluetooth Connection State -->
+          <div id="connBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700">
+            <span id="connIndicator" class="w-2 h-2 rounded-full bg-red-500"></span>
+            <span id="connText" class="text-xs font-medium text-slate-300">Disconnected</span>
+          </div>
+
+          <!-- Connect Button -->
+          <button id="connectBtn" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold text-sm transition-all shadow-lg shadow-blue-600/30 active:scale-95 cursor-pointer flex items-center gap-2">
+            <i data-lucide="bluetooth" class="w-4 h-4"></i>
+            <span>Connect via Bluetooth</span>
+          </button>
+          
+          <!-- Disconnect Button (Hidden initially) -->
+          <button id="disconnectBtn" class="hidden px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold text-sm transition-all active:scale-95 cursor-pointer flex items-center gap-2">
+            <i data-lucide="power" class="w-4 h-4 text-red-400"></i>
+            <span>Disconnect</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl mx-auto w-full px-4 py-6 sm:px-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- LEFT COLUMN: Settings, Charts & Arduino Guide -->
+      <section class="lg:col-span-4 space-y-6 flex flex-col">
+        
+        <!-- MODULE: Bluetooth Configuration & Settings -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-lg relative overflow-hidden">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2">
+              <i data-lucide="settings" class="text-blue-500 w-5 h-5"></i>
+              <h3 class="font-bold text-slate-200">Device Configuration</h3>
+            </div>
+            <button id="settingsHelpBtn" class="text-slate-400 hover:text-blue-500 transition-colors cursor-pointer" title="Configuration details">
+              <i data-lucide="help-circle" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <div class="space-y-4 text-sm">
+            <!-- Bluetooth Profile Selection -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">BLE Profile / Chipset</label>
+              <select id="bleProfile" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer">
+                <option value="hm10">HM-10 / CC2541 (Generic Serial FFE0)</option>
+                <option value="nus">Nordic UART Service (NUS / Adafruit)</option>
+                <option value="hc05">HC-05 (Bluetooth Classic / COM Port Serial)</option>
+                <option value="custom">Custom UUIDs</option>
+              </select>
+              <button id="mobileBleHelpBtn" type="button" class="w-full mt-2 py-1.5 px-3 bg-slate-950 border border-slate-800 hover:border-slate-700 text-blue-400 hover:text-blue-300 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+                <span>Mobile Phone Bluetooth Helper</span>
+              </button>
+            </div>
+
+            <!-- Custom UUID Fields (collapsible/expandable based on profile) -->
+            <div id="customUuidFields" class="hidden space-y-2 pt-2 border-t border-slate-800">
+              <div>
+                <label class="block text-xs font-medium text-slate-400">Service UUID</label>
+                <input id="customServiceUuid" type="text" placeholder="e.g. 0000ffe0-0000-1000-8000-00805f9b34fb" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-300 focus:outline-none focus:border-blue-500">
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs font-medium text-slate-400">TX (Read/Notify)</label>
+                  <input id="customTxUuid" type="text" placeholder="Characteristic" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-300 focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-400">RX (Write)</label>
+                  <input id="customRxUuid" type="text" placeholder="Characteristic" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-300 focus:outline-none focus:border-blue-500">
+                </div>
+              </div>
+            </div>
+
+            <!-- Auto Mode Threshold -->
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Automatic Trigger Point</label>
+                <span id="thresholdVal" class="text-xs font-mono font-bold text-amber-400">30 cm</span>
+              </div>
+              <input id="thresholdSlider" type="range" min="10" max="60" value="30" class="w-full accent-blue-500 bg-slate-950 h-2 rounded-lg cursor-pointer">
+              <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+                <span>10 cm</span>
+                <span>35 cm</span>
+                <span>60 cm</span>
+              </div>
+            </div>
+
+            <!-- Mode Selection: Manual vs Automatic -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Control Mode</label>
+              <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button id="modeManualBtn" class="py-2 text-xs font-bold rounded-lg transition-all duration-200 bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-sm cursor-pointer">
+                  Manual Control
+                </button>
+                <button id="modeAutoBtn" class="py-2 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 cursor-pointer">
+                  Smart Auto
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE: Mode Instructions or Quick Stats -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-lg relative overflow-hidden">
+          <div class="flex items-center gap-2 border-b border-slate-800 pb-2.5">
+            <i data-lucide="info" class="text-blue-500 w-5 h-5"></i>
+            <h3 class="font-bold text-slate-200">System Parameters</h3>
+          </div>
+          <div class="space-y-3 text-xs text-slate-400">
+            <div class="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+              <span>Bluetooth Status</span>
+              <span id="infoBTState" class="font-semibold text-slate-300">Disconnected</span>
+            </div>
+            <div class="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+              <span>GATT Data Protocol</span>
+              <span id="infoProtocol" class="font-semibold text-slate-300">HM-10 (FFE0 Serial)</span>
+            </div>
+            <div class="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+              <span>Arduino Output Format</span>
+              <span class="font-mono bg-slate-900 px-1.5 py-0.5 rounded text-blue-400 font-bold">"distance,status\n"</span>
+            </div>
+            <p class="text-[11px] leading-relaxed italic text-slate-500 pt-1">
+              *If the simulated water level exceeds the threshold in "Smart Auto" mode, the drainage gate is automatically opened.
+            </p>
+          </div>
+        </div>
+
+        <!-- MODULE: Dynamic Chart -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 flex-grow flex flex-col min-h-[220px] shadow-lg relative overflow-hidden">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="activity" class="text-blue-500 w-5 h-5 animate-pulse"></i>
+              <h3 class="font-bold text-slate-200">Level History (Live)</h3>
+            </div>
+            <span class="text-[10px] font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-400">30s window</span>
+          </div>
+          <div class="relative flex-grow min-h-[140px] bg-slate-950 rounded-2xl p-2 border border-slate-800 flex items-center justify-center">
+            <canvas id="historyChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- CENTER & RIGHT COLUMN: Visualization & Telemetry -->
+      <section class="lg:col-span-8 space-y-8">
+
+        <!-- Grid of primary Live Telemetry Displays -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+          
+          <!-- WATER LEVEL CARD -->
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden group transition-all duration-300 hover:border-slate-700/60 shadow-lg min-h-[240px]">
+            <!-- Background Glow -->
+            <div class="absolute -right-12 -top-12 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/15 transition-all"></div>
+            
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <span class="text-xs font-bold text-blue-400 uppercase tracking-widest">Real-time Telemetry</span>
+                <h3 class="text-lg font-medium text-slate-300 mt-1">Water Level</h3>
+              </div>
+              <div id="levelIconContainer" class="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                <i data-lucide="ruler" class="text-blue-400 w-5 h-5"></i>
+              </div>
+            </div>
+
+            <div class="space-y-2 mt-2">
+              <div class="flex items-baseline gap-2">
+                <span id="levelValue" class="text-7xl sm:text-8xl font-black text-white tracking-tighter">15.0</span>
+                <span class="text-3xl font-bold text-slate-500 uppercase">cm</span>
+              </div>
+              <!-- Level Safety Rating Badge -->
+              <div class="flex items-center gap-1.5">
+                <span id="safetyIndicator" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span id="safetyText" class="text-xs font-semibold text-emerald-400 uppercase tracking-wide">Level Safe</span>
+              </div>
+            </div>
+
+            <!-- Mini Progress bar representing depth -->
+            <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden mt-5">
+              <div id="levelProgressBar" class="h-full bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all duration-300" style="width: 25%"></div>
+            </div>
+          </div>
+
+          <!-- DRAINAGE STATUS CARD -->
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 flex flex-col justify-between relative overflow-hidden group transition-all duration-300 hover:border-slate-700/60 shadow-lg min-h-[240px]">
+            <!-- Decorative subtle grid -->
+            <div class="absolute inset-0 opacity-5 pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">System Health</span>
+                <h3 class="text-lg font-medium text-slate-300 mt-1">Operational Status</h3>
+              </div>
+              <div id="statusIconContainer" class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700">
+                <i data-lucide="shield-alert" id="statusIcon" class="text-slate-400 w-5 h-5"></i>
+              </div>
+            </div>
+
+            <div class="space-y-2 mt-2">
+              <div class="flex items-center gap-4">
+                <div id="statusPulsingBadge" class="w-4 h-4 rounded-full bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]"></div>
+                <span id="statusValue" class="text-4xl sm:text-5xl font-bold text-white uppercase tracking-tight">OFF</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span id="statusIndicatorCircle" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+                <span id="statusTextDesc" class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Drainage Closed</span>
+              </div>
+            </div>
+
+            <div class="text-[10px] text-slate-500 mt-5 font-mono">
+              Last Outgoing Cmd: <span id="lastTxCmd" class="text-slate-400">-</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- MAIN MONITOR: SVG WAVE CHANNEL VISUALIZATION -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 relative overflow-hidden shadow-xl">
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-5 pb-3 border-b border-slate-800">
+            <div>
+              <h3 class="font-bold text-slate-100 flex items-center gap-2">
+                <i data-lucide="eye" class="text-blue-500 w-5 h-5"></i>
+                Cross-Section Drainage Profile
+              </h3>
+              <p class="text-xs text-slate-400">Ultrasonic height translation representation</p>
+            </div>
+            <!-- Alert banner in case of high levels -->
+            <div id="dangerBanner" class="hidden flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs font-semibold animate-pulse">
+              <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+              FLOOD LEVEL WARNING
+            </div>
+          </div>
+
+          <!-- The main interactive SVG drawing of water tank/culvert -->
+          <div class="w-full relative flex justify-center bg-slate-950/40 rounded-xl p-4 border border-slate-850 h-[280px]">
+            <svg id="drainageSvg" viewBox="0 0 600 240" class="w-full h-full" preserveAspectRatio="none">
+              <!-- Sky / Culvert Background -->
+              <rect x="0" y="0" width="600" height="240" rx="6" fill="#090d16" />
+              
+              <!-- Culvert grid markings -->
+              <line x1="80" y1="40" x2="520" y2="40" stroke="#1e293b" stroke-dasharray="3,3" />
+              <line x1="80" y1="90" x2="520" y2="90" stroke="#1e293b" stroke-dasharray="3,3" />
+              <line x1="80" y1="140" x2="520" y2="140" stroke="#1e293b" stroke-dasharray="3,3" />
+              <line x1="80" y1="190" x2="520" y2="190" stroke="#1e293b" stroke-dasharray="3,3" />
+              
+              <!-- Culvert Concrete Sidewalls (Left / Right) -->
+              <rect x="0" y="0" width="80" height="240" fill="#111827" opacity="0.9" />
+              <rect x="520" y="0" width="80" height="240" fill="#111827" opacity="0.9" />
+              
+              <!-- Concrete Borders / Lines -->
+              <line x1="80" y1="0" x2="80" y2="240" stroke="#334155" stroke-width="2" />
+              <line x1="520" y1="0" x2="520" y2="240" stroke="#334155" stroke-width="2" />
+
+              <!-- Ultrasonic Sensor Graphic mounted at top center -->
+              <g transform="translate(300, 5)">
+                <!-- Bracket -->
+                <rect x="-35" y="0" width="70" height="6" fill="#475569" rx="1" />
+                <rect x="-15" y="6" width="30" height="8" fill="#64748b" />
+                <!-- Sensor Cylinders (Transmitter / Receiver) -->
+                <circle cx="-10" cy="18" r="7" fill="#1e293b" stroke="#06b6d4" stroke-width="2" />
+                <circle cx="10" cy="18" r="7" fill="#1e293b" stroke="#06b6d4" stroke-width="2" />
+                <!-- Inside grills -->
+                <circle cx="-10" cy="18" r="3" fill="#0f172a" />
+                <circle cx="10" cy="18" r="3" fill="#0f172a" />
+              </g>
+
+              <!-- Echo waves representation (fading out) -->
+              <g id="sensorWaves" opacity="0.3">
+                <path d="M 285,32 Q 300,42 315,32" stroke="#06b6d4" stroke-width="1.5" fill="none" opacity="0.8" />
+                <path d="M 275,44 Q 300,56 325,44" stroke="#06b6d4" stroke-width="1.5" fill="none" opacity="0.6" />
+                <path d="M 265,56 Q 300,72 335,56" stroke="#06b6d4" stroke-width="1.5" fill="none" opacity="0.4" />
+              </g>
+
+              <!-- Level tick markings on the left concrete wall -->
+              <g transform="translate(60, 0)" fill="#64748b" font-family="monospace" font-size="10" text-anchor="end">
+                <text x="10" y="44">50cm</text>
+                <text x="10" y="94">35cm</text>
+                <text x="10" y="144">20cm</text>
+                <text x="10" y="194">5cm</text>
+              </g>
+              <!-- Tick lines -->
+              <path d="M 72,40 L 80,40 M 72,90 L 80,90 M 72,140 L 80,140 M 72,190 L 80,190" stroke="#475569" stroke-width="1.5" />
+
+              <!-- Automatic Safety Threshold Line -->
+              <line id="thresholdSgLine" x1="80" y1="100" x2="520" y2="100" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.8" />
+              <!-- Text for safety threshold -->
+              <text id="thresholdSgText" x="120" y="95" fill="#f59e0b" font-family="monospace" font-size="9" font-weight="bold" opacity="0.8">AUTO TRIGGER: 30cm</text>
+
+              <!-- Outflow pipe on the right wall (drainage gate) -->
+              <g transform="translate(520, 150)">
+                <!-- Pipe hole -->
+                <rect x="0" y="0" width="30" height="50" fill="#0f172a" stroke="#475569" stroke-width="1.5" />
+                <!-- Drainage Gate Valve (sliding up/down or rotating based on status) -->
+                <rect id="gateValve" x="0" y="0" width="4" height="50" fill="#ef4444" />
+                <line x1="2" y1="-10" x2="2" y2="20" stroke="#ef4444" stroke-width="2" id="gateRod" />
+              </g>
+
+              <!-- WATER BODY SVG (Dynamic Waves) -->
+              <!-- Linear gradients for deep water feel -->
+              <defs>
+                <linearGradient id="waterGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#0284c7" stop-opacity="0.85" />
+                  <stop offset="50%" stop-color="#0369a1" stop-opacity="0.9" />
+                  <stop offset="100%" stop-color="#0c4a6e" stop-opacity="0.95" />
+                </linearGradient>
+              </defs>
+
+              <!-- The water fill path -->
+              <path id="waterPath" class="wave-path" d="M 80,180 Q 190,175 300,180 T 520,180 L 520,240 L 80,240 Z" fill="url(#waterGradient)" />
+              <path id="waterHighlightPath" class="wave-path" d="M 80,180 Q 190,182 300,178 T 520,180 L 520,184 L 80,184 Z" fill="#38bdf8" opacity="0.6" />
+
+              <!-- Flowing Outflow stream if system is ON -->
+              <g id="outflowWater" opacity="0">
+                <path d="M 525,170 Q 550,180 560,240 L 540,240 Q 535,195 525,185 Z" fill="#0284c7" opacity="0.8" />
+                <path d="M 525,175 Q 545,185 550,240" stroke="#38bdf8" stroke-width="2" fill="none" opacity="0.6" />
+              </g>
+            </svg>
+
+            <!-- Floating sensor value in center of tank -->
+            <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none bg-slate-900/90 border border-slate-700/50 px-3 py-1 rounded-full shadow-lg">
+              <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Water Level</span>
+              <span id="svgFloatingLevel" class="text-xs font-mono font-bold text-cyan-400">15.0 cm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- MANUAL CONTROLS SECTION -->
+        <div class="grid grid-cols-1 gap-8">
+          
+          <!-- Large ON/OFF Manual Override Button -->
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 flex flex-col justify-between space-y-6 shadow-xl relative overflow-hidden">
+            <!-- Decorative subtle grid -->
+            <div class="absolute inset-0 opacity-5 pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+            
+            <div class="z-10 text-center md:text-left">
+              <h3 class="text-2xl font-bold text-white flex items-center justify-center md:justify-start gap-2">
+                <i data-lucide="sliders" class="text-blue-500 w-6 h-6"></i>
+                Manual Command Deck
+              </h3>
+              <p class="text-xs text-slate-400 mt-2">Force state change overrides via Bluetooth GATT</p>
+            </div>
+
+            <!-- The Big Toggle Control Button -->
+            <div class="z-10 flex items-center justify-center py-4">
+              <button id="mainToggleBtn" class="group relative w-64 h-64 rounded-full bg-slate-800 border-8 border-slate-700 flex flex-col items-center justify-center transition-all hover:border-blue-500/50 hover:bg-slate-800/80 active:scale-95 cursor-pointer">
+                <div class="absolute inset-0 rounded-full border-2 border-dashed border-slate-600 scale-110 opacity-30"></div>
+                <i data-lucide="power" id="toggleButtonIcon" class="w-16 h-16 text-slate-400 group-hover:text-blue-400 mb-4 transition-colors"></i>
+                <span id="toggleButtonText" class="text-xl font-bold text-slate-200 tracking-wide uppercase">Turn Drainage ON</span>
+                <span id="toggleButtonDesc" class="text-xs text-slate-500 mt-2 uppercase tracking-widest">Sends "ON" command</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Hidden simulator elements for JS compatibility -->
+          <div class="hidden">
+            <span id="simHeightValue">0.0 cm</span>
+            <input id="simHeightSlider" type="range" min="0" max="60" value="0">
+            <button id="simRainBtn"></button>
+            <button id="simDrainBtn"></button>
+          </div>
+
+        </div>
+
+      </section>
+    </main>
+
+    <!-- EXPANDED TABS: Console Logger & Developer setup guides (Two-Column Layout) -->
+    <section class="max-w-7xl mx-auto w-full px-6 pb-12 sm:px-10 grid grid-cols-1 lg:grid-cols-12 gap-8 mt-2">
+      
+      <!-- LOG CONSOLE (lg:col-span-5) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 lg:col-span-5 flex flex-col h-[380px] shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="terminal" class="text-blue-500 w-5 h-5"></i>
+            <h3 class="font-bold text-slate-200">Terminal Logger</h3>
+          </div>
+          <button id="clearLogsBtn" class="text-xs px-2.5 py-1 bg-slate-950 border border-slate-800 hover:border-slate-700 hover:text-slate-200 rounded text-slate-400 flex items-center gap-1 transition-all cursor-pointer">
+            <i data-lucide="trash-2" class="w-3 h-3"></i>
+            <span>Clear Logs</span>
+          </button>
+        </div>
+
+        <!-- Scrolling log content -->
+        <div id="terminalConsole" class="flex-grow bg-slate-950 rounded-2xl p-4 border border-slate-850 font-mono text-xs text-slate-300 overflow-y-auto custom-scrollbar space-y-1.5">
+          <div class="text-slate-500">[10:03:25] SMART WATER MONITORING SYSTEM LOG START...</div>
+          <div class="text-amber-400/80">[10:03:25] NOTICE: Simulation Mode active. Connect Bluetooth to parse real hardware GATT streams.</div>
+          <div class="text-cyan-400">[10:03:25] Ready. Bluetooth supports HM-10 (Serial) & Nordic NUS.</div>
+        </div>
+      </div>
+
+      <!-- DEV SETUP GUIDE & ARDUINO CODE (lg:col-span-7) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 lg:col-span-7 flex flex-col h-[380px] shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="file-code" class="text-blue-500 w-5 h-5"></i>
+            <h3 class="font-bold text-slate-200">Arduino Sketch & Wire Diagram</h3>
+          </div>
+          <button id="copyArduinoBtn" class="text-xs px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-md">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span>Copy Sketch</span>
+          </button>
+        </div>
+
+        <!-- Collapsible Tabs for Sketch vs Wiring Diagram -->
+        <div class="flex gap-2 mb-2">
+          <button id="tabSketchBtn" class="px-3 py-1 bg-slate-950 border border-slate-800 text-blue-400 font-bold rounded-lg text-xs cursor-pointer">
+            Arduino Code
+          </button>
+          <button id="tabWiringBtn" class="px-3 py-1 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-slate-200 rounded-lg text-xs cursor-pointer">
+            Wiring Guide
+          </button>
+        </div>
+
+        <!-- Code Block Viewer (Scrollable) -->
+        <div id="guideViewer" class="flex-grow bg-slate-950 rounded-2xl p-4 border border-slate-850 font-mono text-[11px] overflow-y-auto custom-scrollbar text-emerald-400">
+          <pre id="codeSnippet" class="whitespace-pre text-slate-300 select-all"></pre>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-slate-800 bg-slate-900/50 text-center py-6 text-xs text-slate-500 mt-auto">
+      <div class="max-w-7xl mx-auto px-6 sm:px-10 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <p>Smart Water Drainage Monitor © 2026. Standalone offline-safe build.</p>
+        <p class="flex items-center gap-1">
+          Made for Google Chrome Web Bluetooth.
+          <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-500"></i>
+        </p>
+      </div>
+    </footer>
+
+    <!-- HELPER MODAL: BLE Setup Guidance -->
+    <div id="helpModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 max-w-lg w-full rounded-3xl p-8 relative shadow-2xl animate-in fade-in zoom-in duration-200">
+        <button id="closeHelpModal" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+        
+        <div class="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+            <i data-lucide="help-circle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-lg">Web Bluetooth Guide</h3>
+            <p class="text-xs text-slate-400">Understanding setup requirements</p>
+          </div>
+        </div>
+
+        <div class="space-y-3.5 text-xs text-slate-300 leading-relaxed">
+          <p>
+            <strong class="text-blue-400">1. Browser Support:</strong> Web Bluetooth is supported in <strong class="text-white">Google Chrome</strong>, Edge, and Opera on Windows 10/11, macOS, Linux, and Android. It is <strong>not</strong> supported in iOS Safari due to Apple restrictions.
+          </p>
+          <p>
+            <strong class="text-blue-400">2. HTTPS Requirement:</strong> In production, the page must be loaded via <strong class="text-white">HTTPS</strong> (or from <code class="bg-slate-950 px-1 py-0.5 rounded text-amber-400">localhost</code>) to access the Bluetooth adapter. (Our live development workspace handles this automatically).
+          </p>
+          <p>
+            <strong class="text-blue-400">3. Bluetooth Classic vs. BLE:</strong> Standard Web Bluetooth works strictly with <strong class="text-white">Bluetooth Low Energy (BLE)</strong> modules (like HM-10, CC2541, HM-11, CC2640). If you are using classic modules (HC-05 or HC-06), they do not support GATT profiles natively and cannot connect over Web Bluetooth. Use an HM-10 module as a drop-in BLE replacement!
+          </p>
+          <p>
+            <strong class="text-blue-400">4. Service Filtering:</strong> Ensure your Arduino script starts broadcasting standard FFE0 Serial, or Nordic NUS service, so this app's scanner can recognize and subscribe to it.
+          </p>
+        </div>
+
+        <button id="closeHelpModalOk" class="mt-6 w-full py-3 bg-blue-600 text-white hover:bg-blue-500 font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-blue-600/30">
+          Got it, thanks!
+        </button>
+      </div>
+    </div>
+
+    <!-- SECURITY WARNING MODAL: IFrame or Browser Restrictions -->
+    <div id="securityModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 max-w-lg w-full rounded-3xl p-8 relative shadow-2xl animate-in fade-in zoom-in duration-200">
+        <button id="closeSecurityModal" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+        
+        <div class="flex items-center gap-3 border-b border-red-500/20 pb-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400">
+            <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-lg">Bluetooth Access Blocked</h3>
+            <p class="text-xs text-red-400 font-medium">IFrame Sandbox Security Restriction</p>
+          </div>
+        </div>
+
+        <div class="space-y-4 text-xs text-slate-300 leading-relaxed">
+          <p>
+            To protect your privacy, modern browsers (like <strong class="text-white">Google Chrome</strong>) strictly block <strong class="text-blue-400">Web Bluetooth</strong> inside embedded frames (iframes).
+          </p>
+          <div class="bg-slate-950 p-4 rounded-2xl border border-slate-850 space-y-2">
+            <span class="text-amber-400 font-semibold block">🚀 HOW TO FIX THIS:</span>
+            <p class="text-slate-400 text-[11px]">
+              Click the <strong class="text-white">"Open in new tab"</strong> button in the top-right corner of the preview panel to run this app in a standalone window, then click "Connect via Bluetooth" again.
+            </p>
+          </div>
+          <p class="text-[11px] text-slate-500">
+            Note: Web Bluetooth also requires a secure HTTPS connection and a supported browser (Chrome, Edge, Opera).
+          </p>
+        </div>
+
+        <button id="closeSecurityModalOk" class="mt-6 w-full py-3 bg-blue-600 text-white hover:bg-blue-500 font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-blue-600/30">
+          Open App Standalone & Connect
+        </button>
+      </div>
+    </div>
+
+    <!-- MOBILE BLUETOOTH DIAGNOSTICS & TROUBLESHOOTING HELPER MODAL -->
+    <div id="mobileBleModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 max-w-lg w-full rounded-3xl p-6 sm:p-8 relative shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <button id="closeMobileBleModal" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+        
+        <div class="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-400">
+            <i data-lucide="smartphone" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-base sm:text-lg">Mobile Phone Bluetooth Assistant</h3>
+            <p class="text-xs text-slate-400">Step-by-step connection rules for Android & iOS</p>
+          </div>
+        </div>
+
+        <!-- Real-time Live Browser Diagnostics check -->
+        <div class="bg-slate-950 p-4 rounded-2xl border border-slate-850 space-y-3 mb-5">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">📋 Live Browser Compatibility Diagnostics</span>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="flex items-center gap-2">
+              <span id="diagHttps" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+              <span class="text-slate-300">Secure Context (HTTPS)</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="diagBle" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+              <span class="text-slate-300">Web Bluetooth API</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="diagSerial" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+              <span class="text-slate-300">Web Serial API</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="diagStandalone" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+              <span class="text-slate-300">Installed App Mode</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4 text-xs text-slate-300 leading-relaxed">
+          <!-- iOS Setup Section -->
+          <div class="border-l-2 border-amber-500 pl-3 py-0.5 space-y-1">
+            <h4 class="font-bold text-amber-400 flex items-center gap-1.5 text-sm">
+              <i data-lucide="apple" class="w-4 h-4"></i>
+              Apple iOS (iPhone / iPad) Instructions
+            </h4>
+            <p class="text-slate-400">
+              Apple strictly disables Web Bluetooth inside <strong class="text-white">Safari</strong>, <strong class="text-white">Chrome for iOS</strong>, and home-screen PWAs.
+            </p>
+            <div class="bg-slate-950/60 p-2.5 rounded-lg border border-slate-850 mt-1 space-y-2">
+              <span class="font-semibold text-slate-200 block">🚀 How to connect on iPhone:</span>
+              <ol class="list-decimal pl-4 space-y-1 text-slate-400 text-[11px]">
+                <li>Download the free <strong class="text-blue-400">"Bluefy - Web BLE Browser"</strong> from the App Store.</li>
+                <li>Open Bluefy, and copy-paste this application's direct URL into the address bar:
+                  <div class="mt-1.5 flex items-center gap-1.5">
+                    <input id="mobileCopyUrl" type="text" readonly class="bg-slate-900 border border-slate-850 rounded px-2 py-1 text-[10px] font-mono text-blue-400 flex-grow focus:outline-none">
+                    <button id="mobileCopyUrlBtn" type="button" class="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-[10px] text-white font-bold transition-all">Copy</button>
+                  </div>
+                </li>
+                <li>Tap <strong class="text-white">"Connect via Bluetooth"</strong> inside Bluefy. It will open the native iOS BLE pairing prompts perfectly!</li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- Android Setup Section -->
+          <div class="border-l-2 border-blue-500 pl-3 py-0.5 space-y-1">
+            <h4 class="font-bold text-blue-400 flex items-center gap-1.5 text-sm">
+              <i data-lucide="android" class="w-4 h-4"></i>
+              Android Mobile Instructions
+            </h4>
+            <p class="text-slate-400">
+              Android supports Web Bluetooth natively, but system security requires strict permission steps:
+            </p>
+            <ul class="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
+              <li>You MUST use <strong class="text-white">Google Chrome</strong>, Edge, or Opera.</li>
+              <li>Ensure your phone's system <strong class="text-blue-400">Location Services (GPS)</strong> is turned ON. Android requires Location to search for nearby physical Bluetooth beacons.</li>
+              <li>Go to <strong class="text-white">Settings → Apps → Chrome → Permissions</strong> and ensure <strong class="text-blue-400">Nearby Devices</strong> (or Location and Bluetooth) are allowed.</li>
+              <li>Ensure the page is loaded over a secure <strong class="text-emerald-400">HTTPS://</strong> link.</li>
+            </ul>
+          </div>
+
+          <!-- PWA Mode Section -->
+          <div class="border-l-2 border-indigo-500 pl-3 py-0.5 space-y-1">
+            <h4 class="font-bold text-indigo-400 flex items-center gap-1.5 text-sm">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              PWA Standalone App Advice
+            </h4>
+            <p class="text-slate-400">
+              If you installed this app to your phone's home screen, Web Bluetooth sandboxing permissions can occasionally get blocked by the OS. If connection fails, launch the app directly inside your standard mobile browser window instead.
+            </p>
+          </div>
+        </div>
+
+        <button id="closeMobileBleModalOk" class="mt-6 w-full py-3 bg-blue-600 text-white hover:bg-blue-500 font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-blue-600/30">
+          Close Assistant
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN APP CONTROLLER JAVASCRIPT -->
+    <script>
+      // Initialize Lucide Icons
+      lucide.createIcons();
+
+      // Arduino Code Templates
+      const ARDUINO_SKETCH_CODE = `/**
+ * Smart Water Drainage Controller - Arduino Code
+ * Core Hardware: Ultrasonic sensor (HC-SR04) and HM-10 (BLE module)
+ */
+
+#include <SoftwareSerial.h>
+
+// PIN CONFIGURATION
+const int TRIGGER_PIN = 9;   // HC-SR04 trigger pin
+const int ECHO_PIN = 10;     // HC-SR04 echo pin
+const int BLE_RX = 2;        // HM-10 TX connects to Arduino Pin 2
+const int BLE_TX = 3;        // HM-10 RX connects to Arduino Pin 3
+
+// Set up Software Serial for HM-10 BLE module
+SoftwareSerial bleSerial(BLE_RX, BLE_TX);
+
+// Global Variables
+unsigned long lastUpdate = 0;
+const long updateInterval = 1000; // transmit stats every 1000ms
+bool drainageActive = false;
+int triggerThreshold = 30;       // Auto trigger threshold in cm
+
+void setup() {
+  Serial.begin(9600);
+  bleSerial.begin(9600); // Default HM-10 baud rate
+
+  pinMode(TRIGGER_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  
+  Serial.println("System Initialized. BLE ready.");
+}
+
+void loop() {
+  // 1. Process Incoming Commands from Web Bluetooth Dashboard
+  if (bleSerial.available() > 0) {
+    String incomingCmd = bleSerial.readStringUntil('\\n');
+    incomingCmd.trim();
+    
+    if (incomingCmd == "1" || incomingCmd == "ON") {
+      drainageActive = true;
+      Serial.println("Manual override: Drainage ON");
+    } 
+    else if (incomingCmd == "0" || incomingCmd == "OFF") {
+      drainageActive = false;
+      Serial.println("Manual override: Drainage OFF");
+    }
+  }
+
+  // 2. Periodic Sensor Measurement & Transmission
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastUpdate >= updateInterval) {
+    lastUpdate = currentMillis;
+
+    // Trigger pulse
+    digitalWrite(TRIGGER_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIGGER_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIGGER_PIN, LOW);
+
+    // Read echo travel duration
+    long duration = pulseIn(ECHO_PIN, HIGH);
+    
+    // Calculate distance in cm (Speed of sound is 340m/s or 29 microseconds per cm)
+    float distance = (float)duration / 29.0 / 2.0;
+
+    // Outlier checking
+    if (distance > 0 && distance < 400) {
+      // Print local Serial output
+      Serial.print("Level: "); Serial.print(distance);
+      Serial.print(" cm | Status: "); Serial.println(drainageActive ? "ON" : "OFF");
+
+      // TRANSMIT DATA TO DASHBOARD: format is "distance,status\\n"
+      bleSerial.print(distance);
+      bleSerial.print(",");
+      bleSerial.print(drainageActive ? "ON" : "OFF");
+      bleSerial.print("\\n");
+    }
+  }
+}`;
+
+      const WIRING_GUIDE_CODE = `========================================================
+             ARDUINO HARDWARE WIRING SCHEMATIC
+========================================================
+
+1. ULTRASONIC SENSOR (HC-SR04)
+   - VCC  ---> Arduino 5V
+   - GND  ---> Arduino GND
+   - Trig ---> Arduino Pin 9
+   - Echo ---> Arduino Pin 10
+
+2. HM-10 BLE BLUETOOTH MODULE
+   - VCC  ---> Arduino 5V / 3.3V (Check module spec)
+   - GND  ---> Arduino GND
+   - TXD  ---> Arduino Pin 2 (Software RX)
+   - RXD  ---> Arduino Pin 3 (Software TX via 1k/2k voltage divider)
+
+========================================================
+                  VOLTAGE DIVIDER NOTE
+========================================================
+HM-10 RX pin operates at 3.3V logic. Always place a simple
+voltage divider resistor network (1k and 2k resistors) 
+between Arduino Tx Pin 3 and HM-10 RXD to protect the BLE chip.`;
+
+      // State variables
+      let bluetoothDevice = null;
+      let gattServer = null;
+      let txCharacteristic = null; // characteristic to read/notify from
+      let rxCharacteristic = null; // characteristic to write to
+      let isSerialMode = false;
+      let serialPort = null;
+      let serialReader = null;
+      
+      let isConnected = false;
+      let isSimulating = false;
+      let controlMode = 'manual'; // 'manual' or 'auto'
+      let currentThreshold = 30;  // Critical threshold distance (cm)
+      let currentWaterLevel = 0.0; // Starts at 0 until telemetry received
+      let drainageStatus = false; // false = OFF, true = ON
+      let historyData = Array(30).fill(0.0); // Historical level values for charting
+
+      // Buffer for incoming serial data
+      let rxBuffer = '';
+
+      // BLE Profile configurations
+      const BLE_CONFIGS = {
+        hm10: {
+          serviceUuid: '0000ffe0-0000-1000-8000-00805f9b34fb', // standard FFE0 Serial Service
+          txUuid: '0000ffe1-0000-1000-8000-00805f9b34fb',
+          rxUuid: '0000ffe1-0000-1000-8000-00805f9b34fb'
+        },
+        nus: {
+          serviceUuid: '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART Service
+          txUuid: '6e400003-b5a3-f393-e0a9-e50e24dcca9e', // TX
+          rxUuid: '6e400002-b5a3-f393-e0a9-e50e24dcca9e'  // RX
+        }
+      };
+
+      // UI Elements
+      const connectBtn = document.getElementById('connectBtn');
+      const disconnectBtn = document.getElementById('disconnectBtn');
+      const connBadge = document.getElementById('connBadge');
+      const connIndicator = document.getElementById('connIndicator');
+      const connText = document.getElementById('connText');
+      const simBadge = document.getElementById('simBadge');
+      const infoBTState = document.getElementById('infoBTState');
+      const infoProtocol = document.getElementById('infoProtocol');
+      const terminalConsole = document.getElementById('terminalConsole');
+      const clearLogsBtn = document.getElementById('clearLogsBtn');
+
+      const bleProfile = document.getElementById('bleProfile');
+      const customUuidFields = document.getElementById('customUuidFields');
+      const customServiceUuid = document.getElementById('customServiceUuid');
+      const customTxUuid = document.getElementById('customTxUuid');
+      const customRxUuid = document.getElementById('customRxUuid');
+
+      const thresholdSlider = document.getElementById('thresholdSlider');
+      const thresholdVal = document.getElementById('thresholdVal');
+      const modeManualBtn = document.getElementById('modeManualBtn');
+      const modeAutoBtn = document.getElementById('modeAutoBtn');
+
+      const levelValue = document.getElementById('levelValue');
+      const safetyIndicator = document.getElementById('safetyIndicator');
+      const safetyText = document.getElementById('safetyText');
+      const levelProgressBar = document.getElementById('levelProgressBar');
+      const levelIconContainer = document.getElementById('levelIconContainer');
+
+      const statusValue = document.getElementById('statusValue');
+      const statusIndicatorCircle = document.getElementById('statusIndicatorCircle');
+      const statusTextDesc = document.getElementById('statusTextDesc');
+      const statusPulsingBadge = document.getElementById('statusPulsingBadge');
+      const statusIconContainer = document.getElementById('statusIconContainer');
+      const statusIcon = document.getElementById('statusIcon');
+      const lastTxCmd = document.getElementById('lastTxCmd');
+
+      const mainToggleBtn = document.getElementById('mainToggleBtn');
+      const toggleButtonIcon = document.getElementById('toggleButtonIcon');
+      const toggleButtonText = document.getElementById('toggleButtonText');
+      const toggleButtonDesc = document.getElementById('toggleButtonDesc');
+
+      const simHeightSlider = document.getElementById('simHeightSlider');
+      const simHeightValue = document.getElementById('simHeightValue');
+      const simRainBtn = document.getElementById('simRainBtn');
+      const simDrainBtn = document.getElementById('simDrainBtn');
+
+      const helpModal = document.getElementById('helpModal');
+      const settingsHelpBtn = document.getElementById('settingsHelpBtn');
+      const closeHelpModal = document.getElementById('closeHelpModal');
+      const closeHelpModalOk = document.getElementById('closeHelpModalOk');
+
+      const copyArduinoBtn = document.getElementById('copyArduinoBtn');
+      const tabSketchBtn = document.getElementById('tabSketchBtn');
+      const tabWiringBtn = document.getElementById('tabWiringBtn');
+      const codeSnippet = document.getElementById('codeSnippet');
+
+      // SVG visualization Elements
+      const waterPath = document.getElementById('waterPath');
+      const waterHighlightPath = document.getElementById('waterHighlightPath');
+      const thresholdSgLine = document.getElementById('thresholdSgLine');
+      const thresholdSgText = document.getElementById('thresholdSgText');
+      const gateValve = document.getElementById('gateValve');
+      const gateRod = document.getElementById('gateRod');
+      const outflowWater = document.getElementById('outflowWater');
+      const dangerBanner = document.getElementById('dangerBanner');
+      const svgFloatingLevel = document.getElementById('svgFloatingLevel');
+      const sensorWaves = document.getElementById('sensorWaves');
+
+      // Canvas Chart Setup
+      const canvas = document.getElementById('historyChart');
+      const ctx = canvas.getContext('2d');
+      
+      // Auto-resize canvas inside container
+      function resizeCanvas() {
+        const rect = canvas.parentNode.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        drawChart();
+      }
+      window.addEventListener('resize', resizeCanvas);
+      setTimeout(resizeCanvas, 200);
+
+      // System Log append utility
+      function addLog(message, type = 'info') {
+        const now = new Date();
+        const timestamp = now.toTimeString().split(' ')[0];
+        const logEl = document.createElement('div');
+        
+        if (type === 'error') {
+          logEl.className = 'text-rose-400';
+          logEl.textContent = `[${timestamp}] ERROR: ${message}`;
+        } else if (type === 'success') {
+          logEl.className = 'text-emerald-400 font-bold';
+          logEl.textContent = `[${timestamp}] BLE: ${message}`;
+        } else if (type === 'tx') {
+          logEl.className = 'text-cyan-400/80';
+          logEl.textContent = `[${timestamp}] TX ➔ ${message}`;
+        } else if (type === 'rx') {
+          logEl.className = 'text-emerald-400/80';
+          logEl.textContent = `[${timestamp}] RX ⇠ ${message}`;
+        } else if (type === 'alert') {
+          logEl.className = 'text-amber-400 animate-pulse font-semibold';
+          logEl.textContent = `[${timestamp}] ALERT: ${message}`;
+        } else {
+          logEl.className = 'text-slate-400';
+          logEl.textContent = `[${timestamp}] ${message}`;
+        }
+
+        terminalConsole.appendChild(logEl);
+        terminalConsole.scrollTop = terminalConsole.scrollHeight;
+      }
+
+      // Draw historical line chart
+      function drawChart() {
+        const width = canvas.width / window.devicePixelRatio;
+        const height = canvas.height / window.devicePixelRatio;
+        
+        ctx.clearRect(0, 0, width, height);
+
+        if (width === 0 || height === 0) return;
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.4)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 5; i++) {
+          const y = (height / 5) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+
+        // Draw Threshold Line
+        const threshY = height - (currentThreshold / 60) * height;
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, threshY);
+        ctx.lineTo(width, threshY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Label for Threshold
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = '10px monospace';
+        ctx.fillText(`Trigger: ${currentThreshold}cm`, 10, threshY - 4);
+
+        // Plot Water Level Line
+        ctx.beginPath();
+        const step = width / (historyData.length - 1);
+        
+        for (let i = 0; i < historyData.length; i++) {
+          // Map 0-60cm level into container coordinates (inverted because higher value = full)
+          const levelVal = historyData[i];
+          const y = height - (levelVal / 60) * height;
+          const x = i * step;
+
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+
+        // Stroke line with glowing gradient
+        const grad = ctx.createLinearGradient(0, 0, width, 0);
+        grad.addColorStop(0, '#06b6d4');
+        grad.addColorStop(0.5, '#3b82f6');
+        grad.addColorStop(1, '#0284c7');
+        
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 3;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // Area Fill Gradient
+        ctx.lineTo(width, height);
+        ctx.lineTo(0, height);
+        ctx.closePath();
+        const fillGrad = ctx.createLinearGradient(0, 0, 0, height);
+        fillGrad.addColorStop(0, 'rgba(6, 182, 212, 0.15)');
+        fillGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
+        ctx.fillStyle = fillGrad;
+        ctx.fill();
+      }
+
+      // Update Live UI Metric Elements
+      function updateUI() {
+        // 1. Level Telemetry updates
+        levelValue.textContent = currentWaterLevel.toFixed(1);
+        svgFloatingLevel.textContent = `${currentWaterLevel.toFixed(1)} cm`;
+
+        // Safety categorization (Standard heights: empty culvert is ~60cm, full is near 0cm)
+        // High distance from sensor means LOW water level. High level means HIGH threat
+        // For the user: "Distance in centimeters" (0 = completely empty, 60 = overflow danger)
+        // Wait! The user says "Water level in centimeters (e.g. 15cm)". Usually, water level is calculated by:
+        // Level = Total Depth - Sensor Distance.
+        // Let's assume currentWaterLevel is directly the water level height in cm!
+        // Safety brackets for Water Level:
+        // < 20cm (Safe), 20 - 30cm (Moderate), > 30cm (Critical Danger)
+        
+        let percentage = (currentWaterLevel / 60) * 100;
+        levelProgressBar.style.width = `${Math.min(percentage, 100)}%`;
+
+        if (currentWaterLevel < 20) {
+          safetyIndicator.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+          safetyText.textContent = 'Level Safe';
+          safetyText.className = 'text-xs font-semibold text-emerald-400 uppercase tracking-wide';
+          levelIconContainer.className = 'w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20';
+          const levelIcon = levelIconContainer.querySelector('i, svg');
+          if (levelIcon) levelIcon.setAttribute('class', 'text-emerald-400 w-5 h-5');
+          dangerBanner.classList.add('hidden');
+        } else if (currentWaterLevel < currentThreshold) {
+          safetyIndicator.className = 'w-2.5 h-2.5 rounded-full bg-amber-500';
+          safetyText.textContent = 'Moderate Level';
+          safetyText.className = 'text-xs font-semibold text-amber-400 uppercase tracking-wide';
+          levelIconContainer.className = 'w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20';
+          const levelIcon = levelIconContainer.querySelector('i, svg');
+          if (levelIcon) levelIcon.setAttribute('class', 'text-amber-400 w-5 h-5');
+          dangerBanner.classList.add('hidden');
+        } else {
+          safetyIndicator.className = 'w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse';
+          safetyText.textContent = 'High Flood Danger';
+          safetyText.className = 'text-xs font-semibold text-rose-400 uppercase tracking-wide';
+          levelIconContainer.className = 'w-10 h-10 rounded-lg bg-rose-500/10 flex items-center justify-center border border-rose-500/20';
+          const levelIcon = levelIconContainer.querySelector('i, svg');
+          if (levelIcon) levelIcon.setAttribute('class', 'text-rose-400 w-5 h-5');
+          dangerBanner.classList.remove('hidden');
+        }
+
+        // 2. Drainage Status updates
+        const activeStatusIcon = statusIconContainer.querySelector('i, svg');
+        if (drainageStatus) {
+          statusValue.textContent = 'ON';
+          statusValue.className = 'text-4xl sm:text-5xl font-bold text-white uppercase tracking-tight';
+          statusIndicatorCircle.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+          statusTextDesc.textContent = 'Drainage Open';
+          statusTextDesc.className = 'text-xs font-semibold text-emerald-400 uppercase tracking-wide';
+          statusPulsingBadge.className = 'w-4 h-4 rounded-full bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.6)]';
+          statusIconContainer.className = 'w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40 shadow-lg shadow-emerald-500/20 animate-pulse';
+          if (activeStatusIcon) activeStatusIcon.setAttribute('class', 'text-emerald-400 w-5 h-5');
+
+          // Toggle Button Updates
+          mainToggleBtn.className = 'group relative w-64 h-64 rounded-full bg-red-950/40 border-8 border-red-500/70 flex flex-col items-center justify-center transition-all hover:border-red-400 hover:bg-red-950/60 active:scale-95 cursor-pointer shadow-lg shadow-red-500/20';
+          toggleButtonIcon.className = 'w-16 h-16 text-red-400 mb-4 transition-colors animate-pulse';
+          toggleButtonText.textContent = 'Close Drainage';
+          toggleButtonText.className = 'text-xl font-bold text-red-200 tracking-wide uppercase';
+          toggleButtonDesc.textContent = 'Sends "OFF" command';
+          toggleButtonDesc.className = 'text-xs text-red-500/70 mt-2 uppercase tracking-widest';
+        } else {
+          statusValue.textContent = 'OFF';
+          statusValue.className = 'text-4xl sm:text-5xl font-bold text-white uppercase tracking-tight';
+          statusIndicatorCircle.className = 'w-2.5 h-2.5 rounded-full bg-slate-600';
+          statusTextDesc.textContent = 'Drainage Closed';
+          statusTextDesc.className = 'text-xs font-semibold text-slate-400 uppercase tracking-wide';
+          statusPulsingBadge.className = 'w-4 h-4 rounded-full bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]';
+          statusIconContainer.className = 'w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700';
+          if (activeStatusIcon) activeStatusIcon.setAttribute('class', 'text-slate-400 w-5 h-5');
+
+          // Toggle Button Updates
+          mainToggleBtn.className = 'group relative w-64 h-64 rounded-full bg-slate-800 border-8 border-slate-700 flex flex-col items-center justify-center transition-all hover:border-blue-500/50 hover:bg-slate-800/80 active:scale-95 cursor-pointer shadow-md';
+          toggleButtonIcon.className = 'w-16 h-16 text-slate-400 group-hover:text-blue-400 mb-4 transition-colors';
+          toggleButtonText.textContent = 'Open Drainage';
+          toggleButtonText.className = 'text-xl font-bold text-slate-200 tracking-wide uppercase';
+          toggleButtonDesc.textContent = 'Sends "ON" command';
+          toggleButtonDesc.className = 'text-xs text-slate-500 mt-2 uppercase tracking-widest';
+        }
+
+        // 3. Smart Auto control trigger logic
+        if (controlMode === 'auto') {
+          if (currentWaterLevel >= currentThreshold && !drainageStatus) {
+            addLog(`Water Level (${currentWaterLevel.toFixed(1)}cm) exceeded Threshold (${currentThreshold}cm). Activating Drainage!`, 'alert');
+            setDrainageState(true, 'Smart Auto Trigger');
+          } else if (currentWaterLevel < (currentThreshold - 5) && drainageStatus) {
+            // Include 5cm hysteresis to prevent rapid cycling oscillations
+            addLog(`Water Level (${currentWaterLevel.toFixed(1)}cm) safe. Deactivating Drainage.`, 'success');
+            setDrainageState(false, 'Smart Auto Reset');
+          }
+        }
+
+        // 4. Update SVG elements
+        // Mapping height (0 to 60cm) into SVG water level coordinates
+        // SVG size is 600 width, 240 height
+        // Culvert floor is at y = 240, ceiling is at y = 40 (leaves space for sensor)
+        // Range of water height in SVG is 200px (from y=240 completely empty, to y=40 completely full)
+        const waterSvgHeight = (currentWaterLevel / 60) * 200;
+        const waterY = 240 - waterSvgHeight;
+
+        // Wave animation configurations
+        const controlX1 = 80 + 110;
+        const controlY1 = waterY - 4 + (drainageStatus ? Math.sin(Date.now() / 150) * 4 : Math.sin(Date.now() / 400) * 2);
+        const controlX2 = 80 + 220;
+        const controlY2 = waterY + 4 + (drainageStatus ? Math.cos(Date.now() / 150) * 4 : Math.cos(Date.now() / 400) * 2);
+        
+        // Dynamic water SVG paths
+        waterPath.setAttribute('d', `M 80,${waterY} Q ${controlX1},${controlY1} ${controlX2},${waterY} T 520,${waterY} L 520,240 L 80,240 Z`);
+        waterHighlightPath.setAttribute('d', `M 80,${waterY} Q ${controlX1},${controlY1} ${controlX2},${waterY} T 520,${waterY} L 520,${waterY + 3} L 80,${waterY + 3} Z`);
+
+        // Rotate or slide gate valve
+        if (drainageStatus) {
+          gateValve.setAttribute('transform', 'translate(0, -35)'); // open gate
+          gateRod.setAttribute('transform', 'translate(0, -35)');
+          outflowWater.setAttribute('opacity', '1'); // show exit flow
+          sensorWaves.setAttribute('opacity', '0.6');
+        } else {
+          gateValve.setAttribute('transform', 'translate(0, 0)'); // close gate
+          gateRod.setAttribute('transform', 'translate(0, 0)');
+          outflowWater.setAttribute('opacity', '0'); // hide exit flow
+          sensorWaves.setAttribute('opacity', '0.2');
+        }
+
+        // 5. Update historical logging dataset
+        historyData.push(currentWaterLevel);
+        historyData.shift();
+        drawChart();
+      }
+
+      // Modify the drainage status, sending corresponding serial Bluetooth bytes if connected
+      function setDrainageState(targetState, triggerSource) {
+        if (drainageStatus === targetState) return;
+        
+        drainageStatus = targetState;
+        const cmdToSend = drainageStatus ? '1' : '0';
+        const strToSend = drainageStatus ? 'ON\n' : 'OFF\n';
+
+        lastTxCmd.textContent = `"${strToSend.replace('\n', '\\n')}" (${cmdToSend})`;
+
+        if (isConnected) {
+          if (isSerialMode) {
+            sendSerialCommand(strToSend);
+          } else if (rxCharacteristic) {
+            // Send command via Web Bluetooth (writing to GATT rx characteristic)
+            sendBluetoothCommand(strToSend);
+          }
+        } else {
+          addLog(`${triggerSource}: Toggled Drainage ${drainageStatus ? 'ON' : 'OFF'} [Simulated]`, drainageStatus ? 'success' : 'info');
+        }
+
+        updateUI();
+      }
+
+      // Web Bluetooth Connection Engine
+      async function connectBluetooth() {
+        const originalBtnHTML = connectBtn.innerHTML;
+        connectBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-white"></i><span>Scanning & Connecting...</span>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        // Fetch current BLE profile selected
+        const selectedProfile = bleProfile.value;
+        if (selectedProfile === 'hc05') {
+          return connectSerial();
+        }
+
+        let serviceUuid, txUuid, rxUuid;
+
+        if (selectedProfile === 'custom') {
+          serviceUuid = customServiceUuid.value.trim().toLowerCase();
+          txUuid = customTxUuid.value.trim().toLowerCase();
+          rxUuid = customRxUuid.value.trim().toLowerCase();
+        } else {
+          const config = BLE_CONFIGS[selectedProfile];
+          serviceUuid = config.serviceUuid;
+          txUuid = config.txUuid;
+          rxUuid = config.rxUuid;
+        }
+
+        if (!serviceUuid) {
+          addLog("Invalid BLE service configuration UUID.", "error");
+          connectBtn.innerHTML = originalBtnHTML;
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+          return;
+        }
+
+        addLog(`Initiating Bluetooth scan for all nearby BLE devices...`, 'info');
+        addLog(`Waiting for browser device-chooser dialog...`, 'info');
+
+        try {
+          // If we are in an iframe, warn the user proactively
+          const isIframe = window.self !== window.top;
+          if (isIframe) {
+            addLog("⚠️ Sandbox Warning: Web Bluetooth is usually blocked inside previews. Click 'Open in new tab' if it fails.", "alert");
+          }
+
+          if (!navigator.bluetooth) {
+            if (typeof updateMobileDiagnostics === 'function') updateMobileDiagnostics();
+            const mobileBleModal = document.getElementById('mobileBleModal');
+            if (mobileBleModal) mobileBleModal.classList.remove('hidden');
+            throw new Error("Web Bluetooth API is not supported on this browser or connection is insecure (HTTPS required).");
+          }
+
+          // Build optional services list. To communicate with a service, it MUST be declared in optionalServices if using acceptAllDevices: true.
+          const optionalServicesList = [serviceUuid];
+          const commonServices = [
+            '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 FFE0
+            '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic NUS
+            '0000180a-0000-1000-8000-00805f9b34fb', // Device Info
+            '0000180f-0000-1000-8000-00805f9b34fb'  // Battery Service
+          ];
+          commonServices.forEach(uuid => {
+            if (!optionalServicesList.includes(uuid)) {
+              optionalServicesList.push(uuid);
+            }
+          });
+
+          // Standard Web Bluetooth scanning
+          bluetoothDevice = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: optionalServicesList
+          });
+
+          addLog(`Device discovered & selected: ${bluetoothDevice.name || 'Unnamed BLE Device'}. Connecting...`, 'info');
+          
+          // Connect to remote GATT
+          gattServer = await bluetoothDevice.gatt.connect();
+          addLog(`GATT Server connected successfully. Fetching Primary Service...`, 'success');
+
+          const service = await gattServer.getPrimaryService(serviceUuid);
+          addLog(`BLE Primary Service acquired. Locating I/O characteristics...`, 'info');
+
+          // Retrieve Characteristic references
+          txCharacteristic = await service.getCharacteristic(txUuid);
+          
+          if (txUuid === rxUuid) {
+            rxCharacteristic = txCharacteristic;
+          } else {
+            rxCharacteristic = await service.getCharacteristic(rxUuid);
+          }
+
+          addLog("BLE write and read characteristics mapped successfully.", "success");
+
+          // Subscribe to TX characteristic notifications (Arduino transmits, Web dashboard listens)
+          await txCharacteristic.startNotifications();
+          txCharacteristic.addEventListener('characteristicvaluechanged', handleBLENotification);
+          
+          // Update connection flags
+          isConnected = true;
+          isSimulating = false;
+          simBadge.classList.add('hidden'); // Disable simulation banner
+          
+          // Update badges
+          connBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30';
+          connIndicator.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.6)] animate-pulse';
+          connText.textContent = `Connected: ${bluetoothDevice.name || 'Unnamed BLE Device'}`;
+          connText.className = 'text-xs font-medium text-emerald-400';
+          infoBTState.textContent = 'Connected';
+          infoProtocol.textContent = selectedProfile === 'nus' ? 'Nordic NUS Profile' : 'HM-10 Serial Protocol';
+          
+          connectBtn.classList.add('hidden');
+          disconnectBtn.classList.remove('hidden');
+
+          addLog(`System Synchronized with ${bluetoothDevice.name || 'BLE Device'}! Listening for telemetry.`, 'success');
+
+          // Handle disconnection events gracefully
+          bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+        } catch (error) {
+          console.error(error);
+          if (error.name === 'SecurityError' || error.message.includes('iframe') || error.message.includes('sandbox') || error.message.includes('allowed')) {
+            addLog("⚠️ Browser blocked Bluetooth connection inside the iframe.", "error");
+            const securityModal = document.getElementById('securityModal');
+            if (securityModal) {
+              securityModal.classList.remove('hidden');
+            }
+          } else {
+            addLog(`Bluetooth Connection failed: ${error.message}`, 'error');
+          }
+        } finally {
+          connectBtn.innerHTML = originalBtnHTML;
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+      }
+
+      // Web Serial Connection Engine for HC-05 Classic Bluetooth Module
+      async function connectSerial() {
+        const originalBtnHTML = connectBtn.innerHTML;
+        connectBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-white"></i><span>Connecting Serial COM...</span>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        addLog(`Requesting Serial port... (Ensure HC-05 is paired to your computer)`, 'info');
+
+        try {
+          if (!navigator.serial) {
+            throw new Error("Web Serial API is not supported on this browser or connection is insecure (HTTPS/Standalone required).");
+          }
+
+          // If we are in an iframe, warn the user proactively
+          const isIframe = window.self !== window.top;
+          if (isIframe) {
+            addLog("⚠️ Sandbox Warning: Web Serial is usually blocked inside previews. Click 'Open in new tab' in the top right to run standalone.", "alert");
+          }
+
+          serialPort = await navigator.serial.requestPort();
+          addLog(`Serial port chosen. Opening connection at 9600 baud rate...`, 'info');
+
+          await serialPort.open({ baudRate: 9600 });
+
+          isConnected = true;
+          isSerialMode = true;
+          isSimulating = false;
+          simBadge.classList.add('hidden');
+
+          connBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30';
+          connIndicator.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.6)] animate-pulse';
+          connText.textContent = `Connected: HC-05 (Serial Port)`;
+          connText.className = 'text-xs font-medium text-emerald-400';
+          infoBTState.textContent = 'Connected (Serial)';
+          infoProtocol.textContent = 'Bluetooth Classic (HC-05 SPP)';
+
+          connectBtn.classList.add('hidden');
+          disconnectBtn.classList.remove('hidden');
+
+          addLog(`System Synchronized with HC-05! Listening for telemetry.`, 'success');
+
+          // Launch non-blocking read loop
+          readSerialLoop();
+
+        } catch (error) {
+          console.error(error);
+          if (error.name === 'SecurityError' || error.message.includes('iframe') || error.message.includes('sandbox') || error.message.includes('allowed')) {
+            addLog("⚠️ Browser blocked Serial connection inside the iframe.", "error");
+            const securityModal = document.getElementById('securityModal');
+            if (securityModal) {
+              securityModal.classList.remove('hidden');
+            }
+          } else {
+            addLog(`Serial Connection failed: ${error.message}`, 'error');
+          }
+        } finally {
+          connectBtn.innerHTML = originalBtnHTML;
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+      }
+
+      // Continuous read loop for incoming serial telemetry data
+      async function readSerialLoop() {
+        while (serialPort && serialPort.readable && isConnected) {
+          try {
+            const textDecoder = new TextDecoderStream();
+            const readableStreamClosed = serialPort.readable.pipeTo(textDecoder.writable);
+            serialReader = textDecoder.readable.getReader();
+
+            while (true) {
+              const { value, done } = await serialReader.read();
+              if (done) {
+                break;
+              }
+              if (value) {
+                rxBuffer += value;
+                let lines = rxBuffer.split('\n');
+                rxBuffer = lines.pop();
+
+                for (let line of lines) {
+                  line = line.trim();
+                  if (line.length === 0) continue;
+
+                  addLog(`RAW Line Recv: "${line}"`, 'rx');
+
+                  // PARSE PROTOCOL: Format is "distance,status" (e.g., "15.4,ON")
+                  const parts = line.split(',');
+                  if (parts.length >= 2) {
+                    const distanceValue = parseFloat(parts[0]);
+                    const statusStr = parts[1].trim().toUpperCase();
+
+                    if (!isNaN(distanceValue)) {
+                      currentWaterLevel = distanceValue;
+                      simHeightSlider.value = Math.floor(currentWaterLevel);
+                      simHeightValue.textContent = `${currentWaterLevel.toFixed(1)} cm`;
+
+                      if (statusStr === 'ON') {
+                        drainageStatus = true;
+                      } else if (statusStr === 'OFF') {
+                        drainageStatus = false;
+                      }
+
+                      updateUI();
+                    }
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Serial read loop error:", error);
+            if (isConnected) {
+              addLog(`Serial read interrupted: ${error.message}`, 'error');
+            }
+            break;
+          } finally {
+            if (serialReader) {
+              try {
+                serialReader.releaseLock();
+              } catch (e) {}
+            }
+          }
+        }
+      }
+
+      // Write serial command to HC-05
+      async function sendSerialCommand(commandString) {
+        if (!serialPort || !serialPort.writable) return;
+        try {
+          const encoder = new TextEncoder();
+          const writer = serialPort.writable.getWriter();
+          await writer.write(encoder.encode(commandString));
+          writer.releaseLock();
+          addLog(`Sent command (Serial): "${commandString.trim()}"`, 'tx');
+        } catch (error) {
+          addLog(`Command transmission failed: ${error.message}`, 'error');
+        }
+      }
+
+      // Send command string to Arduino over GATT
+      async function sendBluetoothCommand(commandString) {
+        if (!rxCharacteristic) return;
+        try {
+          const encoder = new TextEncoder();
+          const buffer = encoder.encode(commandString);
+          await rxCharacteristic.writeValue(buffer);
+          addLog(`Sent command: "${commandString.trim()}"`, 'tx');
+        } catch (error) {
+          addLog(`Command transmission failed: ${error.message}`, 'error');
+        }
+      }
+
+      // Parsing incoming serial frames from Arduino
+      function handleBLENotification(event) {
+        const value = event.target.value;
+        const decoder = new TextDecoder('utf-8');
+        const chunk = decoder.decode(value);
+        
+        rxBuffer += chunk;
+        
+        // Split by newlines to parse complete frames
+        let lines = rxBuffer.split('\n');
+        // Keep the last partial line in buffer
+        rxBuffer = lines.pop();
+
+        for (let line of lines) {
+          line = line.trim();
+          if (line.length === 0) continue;
+          
+          addLog(`RAW Line Recv: "${line}"`, 'rx');
+          
+          // PARSE PROTOCOL: Format is "distance,status" (e.g., "15.4,ON")
+          const parts = line.split(',');
+          if (parts.length >= 2) {
+            const distanceValue = parseFloat(parts[0]);
+            const statusStr = parts[1].trim().toUpperCase();
+
+            if (!isNaN(distanceValue)) {
+              currentWaterLevel = distanceValue;
+              simHeightSlider.value = Math.floor(currentWaterLevel);
+              simHeightValue.textContent = `${currentWaterLevel.toFixed(1)} cm`;
+              
+              if (statusStr === 'ON') {
+                drainageStatus = true;
+              } else if (statusStr === 'OFF') {
+                drainageStatus = false;
+              }
+              
+              updateUI();
+            }
+          }
+        }
+      }
+
+      // Handle Bluetooth disconnections
+      function onDisconnected() {
+        isConnected = false;
+        isSerialMode = false;
+
+        connBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700';
+        connIndicator.className = 'w-2 h-2 rounded-full bg-red-500';
+        connText.textContent = 'Disconnected';
+        connText.className = 'text-xs font-medium text-slate-300';
+        infoBTState.textContent = 'Disconnected';
+        infoProtocol.textContent = 'Offline';
+        
+        connectBtn.classList.remove('hidden');
+        disconnectBtn.classList.add('hidden');
+
+        addLog("Bluetooth Device disconnected.", "error");
+        updateUI();
+      }
+
+      async function disconnectBluetooth() {
+        if (isSerialMode) {
+          isConnected = false;
+          if (serialReader) {
+            try {
+              await serialReader.cancel();
+            } catch (e) {}
+          }
+          if (serialPort) {
+            try {
+              await serialPort.close();
+            } catch (e) {}
+            serialPort = null;
+          }
+          onDisconnected();
+        } else if (gattServer) {
+          gattServer.disconnect();
+        }
+      }
+
+      // Real-world Mode: Simulation engine disabled
+      let simulationInterval = null;
+      let rainEventActive = false;
+      let drainEventActive = false;
+
+      function startSimulation() {
+        // Disabled per user request
+      }
+
+      // Event Listeners for UI interaction
+      connectBtn.addEventListener('click', connectBluetooth);
+      disconnectBtn.addEventListener('click', disconnectBluetooth);
+
+      // Slider listener for Automatic Mode Threshold
+      thresholdSlider.addEventListener('input', (e) => {
+        currentThreshold = parseInt(e.target.value);
+        thresholdVal.textContent = `${currentThreshold} cm`;
+        thresholdSgLine.setAttribute('y1', 240 - (currentThreshold / 60) * 200);
+        thresholdSgLine.setAttribute('y2', 240 - (currentThreshold / 60) * 200);
+        thresholdSgText.setAttribute('y', (240 - (currentThreshold / 60) * 200) - 5);
+        thresholdSgText.textContent = `AUTO TRIGGER: ${currentThreshold}cm`;
+        updateUI();
+      });
+
+      // Slider listener for Simulated height
+      simHeightSlider.addEventListener('input', (e) => {
+        if (!isSimulating) {
+          addLog("Cannot adjust height slider directly while connected to live Arduino.", "error");
+          e.target.value = Math.floor(currentWaterLevel);
+          return;
+        }
+        currentWaterLevel = parseFloat(e.target.value);
+        simHeightValue.textContent = `${currentWaterLevel.toFixed(1)} cm`;
+        updateUI();
+      });
+
+      // Manual control override toggle
+      mainToggleBtn.addEventListener('click', () => {
+        setDrainageState(!drainageStatus, 'Manual Override');
+      });
+
+      // Trigger simulation events
+      simRainBtn.addEventListener('click', () => {
+        if (!isSimulating) return;
+        rainEventActive = !rainEventActive;
+        drainEventActive = false;
+        
+        if (rainEventActive) {
+          simRainBtn.className = 'py-2.5 px-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer animate-pulse';
+          addLog("Simulation Event: Heavy rain simulation started.", "info");
+        } else {
+          simRainBtn.className = 'py-2.5 px-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer';
+          addLog("Simulation Event: Rain stopped.", "info");
+        }
+      });
+
+      simDrainBtn.addEventListener('click', () => {
+        if (!isSimulating) return;
+        drainEventActive = !drainEventActive;
+        rainEventActive = false;
+        
+        if (drainEventActive) {
+          simDrainBtn.className = 'py-2.5 px-3 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-400 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer animate-pulse';
+          addLog("Simulation Event: Drain discharge simulation active.", "info");
+        } else {
+          simDrainBtn.className = 'py-2.5 px-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer';
+          addLog("Simulation Event: Drain discharge stopped.", "info");
+        }
+      });
+
+      // Control Mode selectors (Manual vs Auto)
+      modeManualBtn.addEventListener('click', () => {
+        controlMode = 'manual';
+        modeManualBtn.className = 'py-2 text-xs font-bold rounded-lg transition-all duration-200 bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-sm cursor-pointer';
+        modeAutoBtn.className = 'py-2 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 cursor-pointer';
+        addLog("Control Mode Switched: MANUAL CONTROL active.", "info");
+      });
+
+      modeAutoBtn.addEventListener('click', () => {
+        controlMode = 'auto';
+        modeAutoBtn.className = 'py-2 text-xs font-bold rounded-lg transition-all duration-200 bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-sm cursor-pointer';
+        modeManualBtn.className = 'py-2 text-xs font-bold rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 cursor-pointer';
+        addLog("Control Mode Switched: SMART AUTOMATIC active.", "info");
+        updateUI(); // run trigger check immediately
+      });
+
+      // Clear Console
+      clearLogsBtn.addEventListener('click', () => {
+        terminalConsole.innerHTML = '<div class="text-slate-500">[Console Cleared] Logs purged.</div>';
+      });
+
+      // BLE configuration toggle
+      bleProfile.addEventListener('change', (e) => {
+        if (e.target.value === 'custom') {
+          customUuidFields.classList.remove('hidden');
+        } else {
+          customUuidFields.classList.add('hidden');
+        }
+        addLog(`Configured GATT Profile: ${e.target.options[e.target.selectedIndex].text}`, 'info');
+      });
+
+      // Help Modal triggers
+      settingsHelpBtn.addEventListener('click', () => {
+        helpModal.classList.remove('hidden');
+      });
+      closeHelpModal.addEventListener('click', () => {
+        helpModal.classList.add('hidden');
+      });
+      closeHelpModalOk.addEventListener('click', () => {
+        helpModal.classList.add('hidden');
+      });
+      helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) {
+          helpModal.classList.add('hidden');
+        }
+      });
+
+      // Security Warning Modal triggers
+      const securityModal = document.getElementById('securityModal');
+      const closeSecurityModal = document.getElementById('closeSecurityModal');
+      const closeSecurityModalOk = document.getElementById('closeSecurityModalOk');
+
+      if (closeSecurityModal) {
+        closeSecurityModal.addEventListener('click', () => {
+          securityModal.classList.add('hidden');
+        });
+      }
+      if (closeSecurityModalOk) {
+        closeSecurityModalOk.addEventListener('click', () => {
+          securityModal.classList.add('hidden');
+          window.open(window.location.href, '_blank');
+        });
+      }
+      if (securityModal) {
+        securityModal.addEventListener('click', (e) => {
+          if (e.target === securityModal) {
+            securityModal.classList.add('hidden');
+          }
+        });
+      }
+
+      // Mobile BLE Helper triggers
+      const mobileBleModal = document.getElementById('mobileBleModal');
+      const mobileBleHelpBtn = document.getElementById('mobileBleHelpBtn');
+      const closeMobileBleModal = document.getElementById('closeMobileBleModal');
+      const closeMobileBleModalOk = document.getElementById('closeMobileBleModalOk');
+      const mobileCopyUrl = document.getElementById('mobileCopyUrl');
+      const mobileCopyUrlBtn = document.getElementById('mobileCopyUrlBtn');
+
+      function updateMobileDiagnostics() {
+        // HTTPS Check
+        const isHttps = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const diagHttps = document.getElementById('diagHttps');
+        if (diagHttps) {
+          diagHttps.className = isHttps ? 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'w-2.5 h-2.5 rounded-full bg-red-500';
+        }
+
+        // Web Bluetooth check
+        const isBleSupported = !!navigator.bluetooth;
+        const diagBle = document.getElementById('diagBle');
+        if (diagBle) {
+          diagBle.className = isBleSupported ? 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'w-2.5 h-2.5 rounded-full bg-red-500';
+        }
+
+        // Web Serial check
+        const isSerialSupported = !!navigator.serial;
+        const diagSerial = document.getElementById('diagSerial');
+        if (diagSerial) {
+          diagSerial.className = isSerialSupported ? 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'w-2.5 h-2.5 rounded-full bg-red-500';
+        }
+
+        // Standalone PWA check
+        const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+        const diagStandalone = document.getElementById('diagStandalone');
+        if (diagStandalone) {
+          diagStandalone.className = isStandalone ? 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'w-2.5 h-2.5 rounded-full bg-slate-600';
+        }
+
+        // URL display
+        if (mobileCopyUrl) {
+          mobileCopyUrl.value = window.location.href;
+        }
+      }
+
+      if (mobileBleHelpBtn) {
+        mobileBleHelpBtn.addEventListener('click', () => {
+          updateMobileDiagnostics();
+          mobileBleModal.classList.remove('hidden');
+        });
+      }
+
+      if (closeMobileBleModal) {
+        closeMobileBleModal.addEventListener('click', () => {
+          mobileBleModal.classList.add('hidden');
+        });
+      }
+
+      if (closeMobileBleModalOk) {
+        closeMobileBleModalOk.addEventListener('click', () => {
+          mobileBleModal.classList.add('hidden');
+        });
+      }
+
+      if (mobileBleModal) {
+        mobileBleModal.addEventListener('click', (e) => {
+          if (e.target === mobileBleModal) {
+            mobileBleModal.classList.add('hidden');
+          }
+        });
+      }
+
+      if (mobileCopyUrlBtn) {
+        mobileCopyUrlBtn.addEventListener('click', () => {
+          const textToCopy = mobileCopyUrl.value;
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            const originalText = mobileCopyUrlBtn.innerHTML;
+            mobileCopyUrlBtn.innerHTML = 'Copied!';
+            mobileCopyUrlBtn.className = 'px-2 py-1 bg-emerald-600 rounded text-[10px] text-white font-bold';
+            setTimeout(() => {
+              mobileCopyUrlBtn.innerHTML = originalText;
+              mobileCopyUrlBtn.className = 'px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-[10px] text-white font-bold transition-all';
+            }, 1500);
+          }).catch(err => {
+            addLog(`Copy URL failed: ${err}`, 'error');
+          });
+        });
+      }
+
+      // Tabs inside Setup guide
+      tabSketchBtn.addEventListener('click', () => {
+        tabSketchBtn.className = 'px-3 py-1 bg-slate-950 border border-slate-800 text-blue-400 font-bold rounded-lg text-xs cursor-pointer';
+        tabWiringBtn.className = 'px-3 py-1 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-slate-200 rounded-lg text-xs cursor-pointer';
+        codeSnippet.textContent = ARDUINO_SKETCH_CODE;
+      });
+
+      tabWiringBtn.addEventListener('click', () => {
+        tabWiringBtn.className = 'px-3 py-1 bg-slate-950 border border-slate-800 text-blue-400 font-bold rounded-lg text-xs cursor-pointer';
+        tabSketchBtn.className = 'px-3 py-1 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-slate-200 rounded-lg text-xs cursor-pointer';
+        codeSnippet.textContent = WIRING_GUIDE_CODE;
+      });
+
+      // Copy Arduino Code to Clipboard
+      copyArduinoBtn.addEventListener('click', () => {
+        const textToCopy = codeSnippet.textContent;
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          const originalText = copyArduinoBtn.innerHTML;
+          copyArduinoBtn.innerHTML = '<i class="text-white w-3.5 h-3.5"></i><span>Copied!</span>';
+          copyArduinoBtn.className = 'text-xs px-2.5 py-1 bg-emerald-600 text-white rounded font-semibold flex items-center gap-1 transition-all';
+          setTimeout(() => {
+            copyArduinoBtn.innerHTML = originalText;
+            copyArduinoBtn.className = 'text-xs px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-md';
+          }, 1500);
+        }).catch(err => {
+          addLog(`Clipboard copy failed: ${err}`, 'error');
+        });
+      });
+
+      // Set initial values
+      codeSnippet.textContent = ARDUINO_SKETCH_CODE;
+      
+      // Start wave visual periodic updates
+      setInterval(() => {
+        updateUI();
+      }, 100);
+
+      // Start the simulation loop
+      startSimulation();
+    </script>
   </body>
 </html>

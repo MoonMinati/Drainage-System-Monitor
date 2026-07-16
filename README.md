@@ -1,44 +1,20 @@
-# Smart Drainage Monitor
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-A Vite + React dashboard for monitoring drainage water levels, simulating storm events, and controlling a pump or gate through Web Bluetooth.
+# Run and deploy your AI Studio app
 
-## Features
+This contains everything you need to run your app locally.
 
-- Live water-level dashboard with threshold, status, and history chart
-- Manual and smart automatic pump control with hysteresis
-- Built-in simulator for demos without hardware
-- Web Bluetooth support for HM-10 / CC2541 serial modules, Nordic UART Service, or custom GATT UUIDs
-- Arduino sketch and wiring reference inside the app
-- Responsive UI for desktop and mobile operation
+View your app in AI Studio: https://ai.studio/apps/b3b0760b-44af-487b-896a-5c3b2db61f26
 
 ## Run Locally
 
-```bash
-npm install
-npm run dev
-```
+**Prerequisites:**  Node.js
 
-Open the URL printed by Vite. Web Bluetooth requires Chrome or Edge on HTTPS or `localhost`.
 
-## Hardware Protocol
-
-The Arduino should transmit newline-terminated frames:
-
-```text
-distance,status
-24.8,OFF
-```
-
-The dashboard sends pump commands as:
-
-```text
-ON
-OFF
-```
-
-## Scripts
-
-- `npm run dev` starts the local development server.
-- `npm run lint` runs TypeScript checks.
-- `npm run build` creates the production bundle.
-- `npm run preview` serves the production build locally.
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

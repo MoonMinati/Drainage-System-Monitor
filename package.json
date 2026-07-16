@@ -1,5 +1,5 @@
 {
-  "name": "smart-drainage-monitor",
+  "name": "react-example",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true});require('fs').rmSync('server.js',{force:true})\"",
+    "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
